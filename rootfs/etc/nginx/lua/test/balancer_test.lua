@@ -310,7 +310,7 @@ describe("Balancer", function()
 
     it("resolves external name to endpoints when service is of type External name", function()
       backend = {
-        name = "exmaple-com", service = { spec = { ["type"] = "ExternalName" } },
+        name = "example-com", service = { spec = { ["type"] = "ExternalName" } },
         endpoints = {
           { address = "example.com", port = "80", maxFails = 0, failTimeout = 0 }
         }
@@ -329,7 +329,7 @@ describe("Balancer", function()
         }
       })
       expected_backend = {
-        name = "exmaple-com", service = { spec = { ["type"] = "ExternalName" } },
+        name = "example-com", service = { spec = { ["type"] = "ExternalName" } },
         endpoints = {
           { address = "192.168.1.1", port = "80" },
           { address = "1.2.3.4", port = "80" },
@@ -339,7 +339,6 @@ describe("Balancer", function()
       local mock_instance = { sync = function(backend) end }
       setmetatable(mock_instance, implementation)
       implementation.new = function(self, backend) return mock_instance end
-      assert.has_no.errors(function() balancer.sync_backend(backend) end)
       stub(mock_instance, "sync")
       assert.has_no.errors(function() balancer.sync_backend(backend) end)
       assert.stub(mock_instance.sync).was_called_with(mock_instance, expected_backend)
@@ -347,14 +346,14 @@ describe("Balancer", function()
 
     it("wraps IPv6 addresses into square brackets", function()
       local backend = {
-        name = "exmaple-com",
+        name = "example-com",
         endpoints = {
           { address = "::1", port = "8080", maxFails = 0, failTimeout = 0 },
           { address = "192.168.1.1", port = "8080", maxFails = 0, failTimeout = 0 },
         }
       }
       local expected_backend = {
-        name = "exmaple-com",
+        name = "example-com",
         endpoints = {
           { address = "[::1]", port = "8080", maxFails = 0, failTimeout = 0 },
           { address = "192.168.1.1", port = "8080", maxFails = 0, failTimeout = 0 },
@@ -364,7 +363,6 @@ describe("Balancer", function()
       local mock_instance = { sync = function(backend) end }
       setmetatable(mock_instance, implementation)
       implementation.new = function(self, backend) return mock_instance end
-      assert.has_no.errors(function() balancer.sync_backend(backend) end)
       stub(mock_instance, "sync")
       assert.has_no.errors(function() balancer.sync_backend(backend) end)
       assert.stub(mock_instance.sync).was_called_with(mock_instance, expected_backend)
