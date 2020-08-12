@@ -70,17 +70,15 @@ local function get_implementation(backend)
   return implementation
 end
 
-local function resolve_external_names(original_backend)
-  local backend = util.deepcopy(original_backend)
-  local endpoints = {}
-  for _, endpoint in ipairs(backend.endpoints) do
+local function resolve_endpoints(endpoints)
+  local resolved = {}
+  for _, endpoint in ipairs(endpoints) do
     local ips = dns_lookup(endpoint.address)
     for _, ip in ipairs(ips) do
-      table.insert(endpoints, { address = ip, port = endpoint.port })
+      table.insert(resolved, { address = ip, port = endpoint.port })
     end
   end
-  backend.endpoints = endpoints
-  return backend
+  return resolved
 end
 
 local function format_ipv6_endpoints(endpoints)
@@ -102,18 +100,22 @@ local function is_backend_with_external_name(backend)
 end
 
 local function sync_backend(backend)
-  if not backend.endpoints or #backend.endpoints == 0 then
-    balancers[backend.name] = nil
+  local name = backend.name
+  local endpoints = backend.endpoints
+  if not endpoints or #endpoints == 0 then
+    balancers[name] = nil
     return
   end
+
+  if is_backend_with_external_name(backend) then
+    endpoints = resolve_endpoints(endpoints)
+  end
+  endpoints = format_ipv6_endpoints(endpoints)
+  backend = util.deepcopy(backend)
+  backend.endpoints = endpoints
 
   local implementation = get_implementation(backend)
-  local balancer = balancers[backend.name]
-
-  if not balancer then
-    balancers[backend.name] = implementation:new(backend)
-    return
-  end
+  local balancer = balancers[name] or implementation:new(backend)
 
   -- every implementation is the metatable of its instances (see .new(...) functions)
   -- here we check if `balancer` is the instance of `implementation`
@@ -122,17 +124,11 @@ local function sync_backend(backend)
     ngx.log(ngx.INFO,
         string.format("LB algorithm changed from %s to %s, resetting the instance",
                       balancer.name, implementation.name))
-    balancers[backend.name] = implementation:new(backend)
-    return
+    balancer = implementation:new(backend)
   end
-
-  if is_backend_with_external_name(backend) then
-    backend = resolve_external_names(backend)
-  end
-
-  backend.endpoints = format_ipv6_endpoints(backend.endpoints)
 
   balancer:sync(backend)
+  balancers[name] = balancer
 end
 
 local function sync_backends()
