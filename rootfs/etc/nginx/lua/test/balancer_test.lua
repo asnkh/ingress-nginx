@@ -331,8 +331,8 @@ describe("Balancer", function()
       expected_backend = {
         name = "example-com", service = { spec = { ["type"] = "ExternalName" } },
         endpoints = {
-          { address = "192.168.1.1", port = "80" },
-          { address = "1.2.3.4", port = "80" },
+          { address = "1.2.3.4", port = "80", maxFails = 0, failTimeout = 0  },
+          { address = "192.168.1.1", port = "80", maxFails = 0, failTimeout = 0  },
         }
       }
 
@@ -355,8 +355,8 @@ describe("Balancer", function()
       local expected_backend = {
         name = "example-com",
         endpoints = {
-          { address = "[::1]", port = "8080", maxFails = 0, failTimeout = 0 },
           { address = "192.168.1.1", port = "8080", maxFails = 0, failTimeout = 0 },
+          { address = "[::1]", port = "8080", maxFails = 0, failTimeout = 0 },
         }
       }
 

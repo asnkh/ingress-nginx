@@ -70,49 +70,57 @@ local function get_implementation(backend)
   return implementation
 end
 
-local function resolve_endpoints(endpoints)
-  local resolved = {}
-  for _, endpoint in ipairs(endpoints) do
-    local ips = dns_lookup(endpoint.address)
-    for _, ip in ipairs(ips) do
-      table.insert(resolved, { address = ip, port = endpoint.port })
-    end
-  end
-  return resolved
-end
-
-local function format_ipv6_endpoints(endpoints)
-  local formatted_endpoints = {}
-  for _, endpoint in ipairs(endpoints) do
-    local formatted_endpoint = endpoint
-    if not endpoint.address:match("^%d+.%d+.%d+.%d+$") then
-      formatted_endpoint.address = string.format("[%s]", endpoint.address)
-    end
-    table.insert(formatted_endpoints, formatted_endpoint)
-  end
-  return formatted_endpoints
-end
-
 local function is_backend_with_external_name(backend)
   local serv_type = backend.service and backend.service.spec
                       and backend.service.spec["type"]
   return serv_type == "ExternalName"
 end
 
+local function resolve_external_services(backend)
+  if is_backend_with_external_name(backend) then
+    local endpoints = backend.endpoints or {}
+    local resolved_endpoints = {}
+    for _, endpoint in ipairs(endpoints) do
+      local ips = dns_lookup(endpoint.address)
+      for _, ip in ipairs(ips) do
+        local resolved_endpoint = util.deepcopy(endpoint)
+        resolved_endpoint.address = ip
+        table.insert(resolved_endpoints, resolved_endpoint)
+      end
+    end
+    backend.endpoints = resolved_endpoints
+  end
+end
+
+local function ensure_endpoints_have_valid_addresses(endpoints)
+  local formatted_endpoints = {}
+  for _, endpoint in ipairs(endpoints) do
+    local address = endpoint.address
+    if address:match("^%d+.%d+.%d+.%d+$") then
+      table.insert(formatted_endpoints, endpoint)
+    elseif address:match("^[:0-9a-fA-F]+$") then
+      local formatted_endpoint = util.deepcopy(endpoint)
+      formatted_endpoint.address = string.format("[%s]", address)
+      table.insert(formatted_endpoints, formatted_endpoint)
+    else
+      ngx.log(ngx.WARN, string.format("Ignored mal-formed IP address: \"%s\"", address))
+    end
+  end
+
+  table.sort(formatted_endpoints, function(a, b) return a.address < b.address end)
+  return formatted_endpoints
+end
+
 local function sync_backend(backend)
+  backend = util.deepcopy(backend)
+  resolve_external_services(backend)
+
   local name = backend.name
-  local endpoints = backend.endpoints
-  if not endpoints or #endpoints == 0 then
+  backend.endpoints = ensure_endpoints_have_valid_addresses(backend.endpoints or {})
+  if #backend.endpoints == 0 then
     balancers[name] = nil
     return
   end
-
-  if is_backend_with_external_name(backend) then
-    endpoints = resolve_endpoints(endpoints)
-  end
-  endpoints = format_ipv6_endpoints(endpoints)
-  backend = util.deepcopy(backend)
-  backend.endpoints = endpoints
 
   local implementation = get_implementation(backend)
   local balancer = balancers[name] or implementation:new(backend)
